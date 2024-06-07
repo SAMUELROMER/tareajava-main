@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Subir Imagen a S3</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Subir imagen a S3</h1>
+      <form id="uploadForm">
+        <div id="imageContainer">
+          <img
+            id="previewImage"
+            src="https://your-s3-bucket-url/default-image.png"
+            alt="Comienza a subir imágenes"
+          />
+        </div>
+        <input type="file" id="file" name="Imagenes" accept="image/*" />
+      </form>
+      <button type="submit" id="submitButton" form="uploadForm">Subir</button>
+    </div>
+
+    <script>
+      document.getElementById('file').addEventListener('change', (event) => {
+        const fileInput = event.target;
+        const fileName = document.getElementById('fileName');
+        const previewImage = document.getElementById('previewImage');
+
+        fileName.textContent = fileInput.files[0]
+          ? fileInput.files[0].name
+          : 'Ningún archivo seleccionado';
+        previewImage.src = fileInput.files[0]
+          ? URL.createObjectURL(fileInput.files[0])
+          : 'https://your-s3-bucket-url/default-image.png';
+      });
+
+      document
+        .getElementById('uploadForm')
+        .addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const fileInput = document.getElementById('file');
+          const formData = new FormData();
+          formData.append('file', fileInput.files[0]);
+
+          const submitButton = document.getElementById('submitButton');
+          submitButton.disabled = true;
+
+          try {
+            const response = await fetch('/api/s3/upload', {
+              method: 'POST',
+              body: formData,
+            });
+            const data = await response.json();
+            if (data.success) {
+              submitButton.textContent = 'Subido con éxito';
+              submitButton.style.backgroundColor = '#28a745';
+              const previewImage = document.getElementById('previewImage');
+              previewImage.src = data.data.url;
+            } else {
+              throw new Error(data.message);
+            }
+          } catch (error) {
+            console.error('Error uploading the file:', error);
+            submitButton.textContent = 'Error al subir';
+            submitButton.style.backgroundColor = '#dc3545';
+          } finally {
+            setTimeout(() => {
+              submitButton.textContent = 'Subir';
+              submitButton.style.backgroundColor = '';
+              submitButton.disabled = false;
+            }, 3000);
+          }
+        });
+    </script>
+  </body>
+</html>
