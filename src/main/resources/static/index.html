@@ -13,33 +13,36 @@
   <body>
     <div class="container">
       <h1>Subir imagen a S3</h1>
+      <!-- Formulario para subir la imagen -->
       <form id="uploadForm">
         <div id="imageContainer">
+          <!-- Imagen de vista previa -->
           <img
             id="previewImage"
             src="https://your-s3-bucket-url/default-image.png"
             alt="Comienza a subir imágenes"
           />
         </div>
+        <!-- Campo para seleccionar el archivo -->
         <input type="file" id="file" name="Imagenes" accept="image/*" />
       </form>
+      <!-- Botón para enviar el formulario -->
       <button type="submit" id="submitButton" form="uploadForm">Subir</button>
     </div>
 
     <script>
+      // Actualizar la vista previa de la imagen cuando se selecciona un archivo
       document.getElementById('file').addEventListener('change', (event) => {
         const fileInput = event.target;
-        const fileName = document.getElementById('fileName');
         const previewImage = document.getElementById('previewImage');
 
-        fileName.textContent = fileInput.files[0]
-          ? fileInput.files[0].name
-          : 'Ningún archivo seleccionado';
+        // Mostrar el nombre del archivo seleccionado
         previewImage.src = fileInput.files[0]
           ? URL.createObjectURL(fileInput.files[0])
           : 'https://your-s3-bucket-url/default-image.png';
       });
 
+      // Manejar el envío del formulario
       document
         .getElementById('uploadForm')
         .addEventListener('submit', async (event) => {
@@ -52,12 +55,14 @@
           submitButton.disabled = true;
 
           try {
+            // Enviar la solicitud de subida de archivo al servidor
             const response = await fetch('/api/s3/upload', {
               method: 'POST',
               body: formData,
             });
             const data = await response.json();
             if (data.success) {
+              // Mostrar mensaje de éxito y actualizar la vista previa
               submitButton.textContent = 'Subido con éxito';
               submitButton.style.backgroundColor = '#28a745';
               const previewImage = document.getElementById('previewImage');
@@ -66,10 +71,12 @@
               throw new Error(data.message);
             }
           } catch (error) {
+            // Mostrar mensaje de error
             console.error('Error uploading the file:', error);
             submitButton.textContent = 'Error al subir';
             submitButton.style.backgroundColor = '#dc3545';
           } finally {
+            // Restaurar el estado del botón después de un tiempo
             setTimeout(() => {
               submitButton.textContent = 'Subir';
               submitButton.style.backgroundColor = '';
