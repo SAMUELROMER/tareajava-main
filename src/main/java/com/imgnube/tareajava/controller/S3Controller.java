@@ -1,32 +1,55 @@
 package com.imgnube.tareajava.controller;
 
-// Importaciones necesarias de Spring y Lombok
 import com.imgnube.tareajava.service.S3Service;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-
-@RestController // Indica que esta clase es un controlador REST de Spring
-@RequestMapping("/api/s3") // Mapea las solicitudes HTTP a /api/s3
-@RequiredArgsConstructor // Genera un constructor con todos los campos finales como parámetros
+@RestController
+@RequestMapping("/api/s3")
 public class S3Controller {
 
-    // Inyección del servicio S3Service
-    private final S3Service s3Service;
+    private static final Logger logger = LoggerFactory.getLogger(S3Controller.class);
 
-    @PostMapping("/upload") // Mapea las solicitudes POST a /api/s3/upload
+    @Autowired
+    private S3Service s3Service;
+
+    @PostMapping("/upload")
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
-        try {
-            // Llama al método uploadFile del servicio S3Service y obtiene la URL del archivo subido
-            String url = s3Service.uploadFile(file);
-            // Devuelve una respuesta HTTP 200 OK con un mensaje de éxito y la URL del archivo subido
-            return ResponseEntity.ok().body("{\"success\": true, \"message\": \"La imagen se subió correctamente!\", \"data\": {\"url\": \"" + url + "\"}}");
-        } catch (IOException e) {
-            // Devuelve una respuesta HTTP 500 Internal Server Error en caso de excepción
-            return ResponseEntity.status(500).body("{\"success\": false, \"message\": \"No se pudo subir la imagen\", \"data\": null}");
+        logger.info("Recibida solicitud para subir archivo: {}", file.getOriginalFilename());
+        logger.debug("Tamaño del archivo: {} bytes", file.getSize());
+        logger.debug("Tipo de contenido: {}", file.getContentType());
+
+        if (file.isEmpty()) {
+            logger.warn("Se intentó subir un archivo vacío");
+            return ResponseEntity.badRequest().body("No se puede subir un archivo vacío");
         }
+
+        try {
+            logger.debug("Iniciando proceso de subida con S3Service");
+            String fileUrl = s3Service.uploadFile(file);
+            logger.info("Archivo subido correctamente. URL: {}", fileUrl);
+            return ResponseEntity.ok(fileUrl);
+        } catch (Exception e) {
+            logger.error("Error al subir archivo: {}", file.getOriginalFilename(), e);
+            logger.debug("Detalles del error:", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error al subir archivo: " + e.getMessage());
+        } finally {
+            logger.debug("Finalizando procesamiento de solicitud de subida");
+        }
+    }
+
+    // Puedes agregar más métodos aquí si es necesario
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleException(Exception e) {
+        logger.error("Error no manejado en el controlador", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body("Se produjo un error inesperado: " + e.getMessage());
     }
 }

@@ -1,56 +1,90 @@
 package com.imgnube.tareajava.service;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.quartz.*;
+import org.springframework.scheduling.quartz.SchedulerFactoryBean;
 
 import java.io.IOException;
-import java.time.Duration;
+import java.util.Date;
 
-@Service // Indica que esta clase es un servicio gestionado por Spring
-@RequiredArgsConstructor // Genera un constructor con todos los campos finales como parámetros
+
+@Service
 public class S3Service {
 
-    // Inyección de dependencias: Cliente S3 y S3Presigner
-    private final S3Client s3Client;
-    private final S3Presigner s3Presigner;
+    private static final Logger logger = LoggerFactory.getLogger(S3Service.class);
 
-    // Inyección del nombre del bucket desde las propiedades de configuración
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
+    @Autowired
+    private S3Client s3Client;
 
-    // Método para subir un archivo a S3
-    public String uploadFile(MultipartFile file) throws IOException {
-        // Genera una clave única para el archivo utilizando el tiempo actual y el nombre original del archivo
-        String key = System.currentTimeMillis() + "-" + file.getOriginalFilename();
+    @Autowired
+    private SchedulerFactoryBean schedulerFactoryBean;
+
+    private String bucketName = "s3-prenube";
+
+    public String uploadFile(MultipartFile file) throws IOException, SchedulerException {
+        String fileName = file.getOriginalFilename();
+        String contentType = "image/jpeg";
+
+        logger.info("Iniciando subida de archivo: {}", fileName);
+        // ... (resto del código de subida)
+
+        // Programar la eliminación del archivo
+        scheduleFileDeletion(fileName);
+
+        String fileUrl = String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName);
+        logger.info("URL del archivo subido: {}. Se eliminará en 1 minuto.", fileUrl);
+        return fileUrl;
+    }
+
+    private void scheduleFileDeletion(String fileName) throws SchedulerException {
+        logger.info("Programando eliminación del archivo: {}", fileName);
         
-        // Crea una solicitud para subir el archivo
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(bucketName) // Especifica el bucket
-                .key(key) // Especifica la clave del archivo
-                .contentType(file.getContentType()) // Especifica el tipo de contenido del archivo
+        Scheduler scheduler = schedulerFactoryBean.getScheduler();
+        JobDetail job = JobBuilder.newJob(FileDeleteJob.class)
+                .withIdentity(fileName, "deleteGroup")
+                .usingJobData("fileName", fileName)
+                .usingJobData("bucketName", bucketName)
                 .build();
 
-        // Sube el archivo a S3 utilizando la solicitud y el cuerpo del archivo
-        s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
-
-        // Crea una solicitud para obtener una URL pre-firmada para el archivo subido
-        GetObjectPresignRequest getObjectPresignRequest = GetObjectPresignRequest.builder()
-                .getObjectRequest(r -> r.bucket(bucketName).key(key)) // Especifica el bucket y la clave del archivo
-                .signatureDuration(Duration.ofHours(1)) // Especifica la duración de la validez de la URL pre-firmada
+        Trigger trigger = TriggerBuilder.newTrigger()
+                .withIdentity(fileName + "Trigger", "deleteGroup")
+                .startAt(new Date(System.currentTimeMillis() + 60000)) // 1 minuto
                 .build();
 
-        // Genera la URL pre-firmada utilizando la solicitud
-        PresignedGetObjectRequest presignedGetObjectRequest = s3Presigner.presignGetObject(getObjectPresignRequest);
-        
-        // Devuelve la URL pre-firmada como cadena
-        return presignedGetObjectRequest.url().toString();
+        scheduler.scheduleJob(job, trigger);
+    }
+
+    // Job para eliminar el archivo
+    public static class FileDeleteJob implements Job {
+        @Autowired
+        private S3Client s3Client;
+
+        private static final Logger logger = LoggerFactory.getLogger(FileDeleteJob.class);
+
+        @Override
+        public void execute(JobExecutionContext context) {
+            JobDataMap dataMap = context.getJobDetail().getJobDataMap();
+            String fileName = dataMap.getString("fileName");
+            String bucketName = dataMap.getString("bucketName");
+
+            logger.info("Ejecutando tarea de eliminación para el archivo: {}", fileName);
+
+            try {
+                DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(fileName)
+                        .build();
+                s3Client.deleteObject(deleteObjectRequest);
+                logger.info("Archivo eliminado con éxito: {}", fileName);
+            } catch (Exception e) {
+                logger.error("Error al eliminar el archivo: {}", fileName, e);
+            }
+        }
     }
 }

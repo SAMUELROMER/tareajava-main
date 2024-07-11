@@ -2,13 +2,13 @@ package com.imgnube.tareajava;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication // Marca esta clase como una aplicación Spring Boot
+@SpringBootApplication
+@EnableScheduling
 public class TareajavaApplication {
 
     public static void main(String[] args) {
-        // Inicia la aplicación Spring Boot
         SpringApplication.run(TareajavaApplication.class, args);
     }
-
 }
